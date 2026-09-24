@@ -401,9 +401,8 @@ func tryLowercaseRegistryFromLowercased(ref string,
 
 // lowercaseRegistryBySlash is the fallback when both parsing attempts fail.
 // When neither ParseReference(ref) nor ParseReference(strings.ToLower(ref))
-// succeeds, use a heuristic to detect if the part before "/" is likely a
-// registry (hostname) or a namespace. Hostnames contain ".", ":" (port),
-// or are exactly "localhost".
+// succeeds, use heuristic detection and aggressive case fixing to maintain
+// backward compatibility without throwing errors during error recovery.
 func lowercaseRegistryBySlash(ref string) string {
 	firstSlash := strings.Index(ref, "/")
 	if firstSlash == notFound {
@@ -420,9 +419,22 @@ func lowercaseRegistryBySlash(ref string) string {
 
 	if hasPort || hasDot || isLocalhost {
 		// Looks like a registry hostname, lowercase it.
-		return strings.ToLower(beforeSlash) + ref[firstSlash:]
+		result := strings.ToLower(beforeSlash) + ref[firstSlash:]
+		// If repo path still has uppercase (e.g., MyOrg/MyApp), fall back to
+		// fully lowercase to ensure parsing succeeds in error recovery.
+		repoHasUppercase := strings.ContainsAny(result[firstSlash:],
+			"ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+		if repoHasUppercase {
+			return strings.ToLower(ref)
+		}
+		return result
 	}
 
-	// Looks like a namespace/repository name, preserve case.
+	// Looks like a namespace/repository name. If it has uppercase that would
+	// cause parsing to fail, lowercase everything to recover.
+	if strings.ContainsAny(ref, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+		return strings.ToLower(ref)
+	}
+
 	return ref
 }
