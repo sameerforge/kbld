@@ -402,11 +402,26 @@ func extractAndRemoveTagSuffix(
 	}
 
 	colonIdx := strings.Index(lastSegment, ":")
-	if colonIdx == notFound || looksLikeHostname(lastSegment[:colonIdx]) {
+	if colonIdx == notFound {
 		return ref, ""
 	}
 
-	// Remove :tag from ref and return separately
+	// If there's a slash, the last segment is in the repo path (not hostname),
+	// so any colon is a tag separator, not a port separator.
+	if lastSlashIdx != notFound {
+		refWithoutTag = ref[:len(ref)-len(lastSegment[colonIdx:])]
+		tagSuffix = lastSegment[colonIdx:]
+		return refWithoutTag, tagSuffix
+	}
+
+	// No slash: could be bare image name or registry with port.
+	// Only treat colon as port separator if the before-part looks like a
+	// hostname.
+	if looksLikeHostname(lastSegment[:colonIdx]) {
+		return ref, ""
+	}
+
+	// Not a hostname, so colon is a tag separator
 	refWithoutTag = ref[:len(ref)-len(lastSegment[colonIdx:])]
 	tagSuffix = lastSegment[colonIdx:]
 	return refWithoutTag, tagSuffix
